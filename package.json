@@ -22,10 +22,11 @@
   "dependencies": {
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
-    "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/platform-express": "^10.3.1",
     "@types/xlsx": "^0.0.36",
     "file-reader": "^1.1.1",
     "moment": "^2.30.1",
+    "multer": "^1.4.5-lts.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "xlsx": "^0.18.5"
