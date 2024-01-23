@@ -1,53 +1,69 @@
 import { Injectable } from '@nestjs/common';
-import { FileReader } from 'file-reader';
+import * as fs from 'fs/promises';
 import * as XLSX from 'xlsx';
 
 @Injectable()
 export class DataService {
   constructor() {}
 
-  async getData(file: File) {
-    console.log(FileReader);
-    const reader = FileReader;
-    reader.onload = async () => {
-      const data = await reader.reasult;
+  async getData(file: Buffer) {
+    if (file.length === 0) {
+      throw new Error('O arquivo está vazio');
+    }
 
-      if (
-        data.type ===
-        'application/vnd.openxmlformats-officedocument.speadsheetml.sheet'
-      ) {
-        return this.readCsv(data);
-      } else {
-        return this.readXlsx(data);
-      }
-    };
-
-    reader.readAsArrayBuffer(file);
+    if (file.toString('hex', 0, 4) === '504b0304') {
+      return this.readXlsx(file);
+    } else {
+      return this.readCsv(file);
+    }
   }
 
-  async readCsv(data: ArrayBuffer) {
-    const rows = new TextDecoder().decode(data);
-    const a = rows[0];
-    const b = rows[1];
-    console.log(a, b);
-    // const mrr = rows.reduce((acc, value) => acc + value, 0);
-    // const churnRate =
-    //   rows.reduce((acc, value) => acc + (value === 0 ? 1 : 0), 0) / rows.length;
-    // return { mrr, churnRate };
+  async readFile(filePath: string): Promise<ArrayBuffer> {
+    const data = await fs.readFile(filePath);
+    return data.buffer;
   }
 
-  async readXlsx(data: ArrayBuffer) {
-    const workbook = XLSX.read(data, { type: 'array' });
-    console.log(typeof workbook.Sheets.length);
-    const sheet = workbook.Sheets[0];
-    const rows = sheet.data.reduce((acc, row) => [...acc, ...row], []);
-    const mrr = rows.reduce((acc, value) => acc + value[0], 0);
-    const churnRate =
-      rows.reduce((acc, value) => acc + (value[1] === 0 ? 1 : 0), 0) /
-      rows.length;
+  async readCsv(data: Buffer) {
+    const rows = data.toString().split('\n');
 
-    console.log(mrr, churnRate);
+    let totalValue = 0;
+    let churnCount = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i].split(',');
+      const value = parseFloat(row[0]);
+
+      totalValue += value;
+      churnCount += parseFloat(row[1]) === 0 ? 1 : 0;
+    }
+
+    const mrr = totalValue / (rows.length - 1);
+    const churnRate = churnCount / (rows.length - 1);
 
     return { mrr, churnRate };
+  }
+
+  async readXlsx(data: Buffer) {
+    const workbook = XLSX.read(data, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    let totalValue = 0;
+    let churnCount = 0;
+
+    rows.forEach((row) => {
+      const potentialMRR = parseFloat(row['valor']);
+      const mrr = potentialMRR;
+
+      const status = row['status'];
+
+      totalValue += mrr;
+      churnCount += status.toLowerCase() === 'inativa' ? 1 : 0;
+    });
+
+    const averageMRR = totalValue / rows.length;
+    const churnRate = churnCount / rows.length;
+
+    return { mrr: averageMRR, churnRate };
   }
 }
