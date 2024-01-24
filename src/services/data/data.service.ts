@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import * as fs from 'fs/promises';
 import * as XLSX from 'xlsx';
+import { parse } from 'csv-parse';
 
 @Injectable()
 export class DataService {
@@ -18,29 +18,31 @@ export class DataService {
     }
   }
 
-  async readFile(filePath: string): Promise<ArrayBuffer> {
-    const data = await fs.readFile(filePath);
-    return data.buffer;
-  }
-
   async readCsv(data: Buffer) {
-    const rows = data.toString().split('\n');
+    const rows = await this.parseCsv(data.toString());
 
     let totalValue = 0;
     let churnCount = 0;
 
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i].split(',');
-      const value = parseFloat(row[0]);
+    rows.forEach((row, index) => {
+      if (index > 0) {
+        const potentialMRR = parseFloat(row[6].replace(',', '.'));
+        totalValue += potentialMRR;
+      }
 
-      totalValue += value;
-      churnCount += parseFloat(row[1]) === 0 ? 1 : 0;
-    }
+      const status = row[3];
+      churnCount += this.calculateChurnRate(status);
+    });
 
-    const mrr = totalValue / (rows.length - 1);
-    const churnRate = churnCount / (rows.length - 1);
+    const averageMRR = totalValue / rows.length;
+    const churnRate = churnCount / rows.length;
 
-    return { mrr, churnRate };
+    return {
+      mrr: averageMRR,
+      churnRate,
+      headers: rows[0],
+      values: this.getValuesFromRows(rows),
+    };
   }
 
   async readXlsx(data: Buffer) {
@@ -58,12 +60,46 @@ export class DataService {
       const status = row['status'];
 
       totalValue += mrr;
-      churnCount += status.toLowerCase() === 'inativa' ? 1 : 0;
+      churnCount += this.calculateChurnRate(status);
     });
 
     const averageMRR = totalValue / rows.length;
     const churnRate = churnCount / rows.length;
 
-    return { mrr: averageMRR, churnRate };
+    return {
+      mrr: averageMRR,
+      churnRate,
+      headers: rows[0],
+      values: this.getValuesFromRows(rows),
+    };
+  }
+
+  private parseCsv(csvString: string): Promise<string[][]> {
+    return new Promise((resolve, reject) => {
+      parse(csvString, { columns: false }, (err, output) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(output);
+        }
+      });
+    });
+  }
+
+  private getValuesFromRows(rows) {
+    return rows.map((row, index) => {
+      if (index > 0) {
+        return Object.values(row);
+      }
+    });
+  }
+
+  private calculateChurnRate(status: string): number {
+    const statusLower = status.toLowerCase();
+    return statusLower === 'cancelada' ||
+      statusLower === 'trial cancelado' ||
+      statusLower === 'cancelado'
+      ? 1
+      : 0;
   }
 }

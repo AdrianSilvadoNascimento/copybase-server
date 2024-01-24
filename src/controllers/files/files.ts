@@ -15,11 +15,9 @@ export class Files {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async getData(@UploadedFile() file: any) {
-    console.log('file:', file);
     try {
       const data = await this.dataService.getData(file.buffer);
-      console.log(data);
-      return { success: true, data };
+      return data;
     } catch (error) {
       console.error(error.message);
       return { success: false, message: 'Erro ao processar o arquivo.' };
